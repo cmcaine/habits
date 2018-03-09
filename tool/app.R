@@ -14,6 +14,15 @@ inputWidgets = inputPanel(
   selectInput('split', 'split', filters)
 )
 
+# Get aggregated lines
+# Each segment will have a list of trips IDs that start, intersecting, or end in the segment
+# Table of trips relates trip ID to aggregate statistics
+load("../data/roads_sf.Rdata")
+
+# Get pollution raster for overlay
+load("../data/pollution_brick.RData")
+
+
 updateOutputs = function(input, output, regions) {
 
   inner = function(variable, filter, split, regions, trips) {
@@ -55,8 +64,11 @@ server <- function(input, output) {
    output$map <- renderLeaflet({
      leaflet() %>%
        addProviderTiles(provider = "CartoDB.Positron") %>%
-       setView(lng = -2.24, 53.48, zoom = 13) %>%
-       addDrawToolbar(targetGroup = 'draw', circleOptions = drawCircleOptions(), editOptions = editToolbarOptions())
+       setView(-1.61, 54.97, zoom = 13) %>%
+       addDrawToolbar(targetGroup = 'draw', circleOptions = drawCircleOptions(), editOptions = editToolbarOptions()) %>%
+       addLayersControl(overlayGroups = c("Pollution map")) %>%
+       addRasterImage(pollution_brick[[1]], group = "Pollution map", opacity = .4) %>%
+       addPolygons(data = roads)
    })
 
    #output$plot <- renderPlot({plot(rnorm(100))})
@@ -73,6 +85,9 @@ server <- function(input, output) {
        # Add to region list
 
      # updateOutputs(input, output, regions)
+
+     proxy = leafletProxy("map") %>%
+       hideGroup(c("Pollution map"))
    })
 }
 
