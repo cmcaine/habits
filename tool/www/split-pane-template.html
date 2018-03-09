@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+<style>
+html {
+    height: 100%;
+}
+body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+#topPane {
+    background: red;
+    /*
+    overflow: hidden;
+    border-bottom: 3px solid black;
+    width: 100%;
+    height: 75%;
+    overflow: hidden;
+    z-index: 1;
+    resize: vertical;
+    */
+}
+
+#bottomPane {
+    /*height: 100%;*/
+    background: blue;
+}
+
+.split {
+    overflow: hidden;
+    box-sizing: border-box;
+    position: relative;
+}
+
+p {
+    margin: 0
+}
+
+.gutter {
+    background: black;
+}
+
+#plot, #map {
+    height: 100%;
+    width: 100%;
+}
+
+.split img {
+    height: 100% !important;
+}
+</style>
+<!-- <script src="https://cdn.jsdelivr.net/npm/interactjs@1.3.3/dist/interact.min.js"></script> -->
+<!-- <script src="https://unpkg.com/split.js/split.min.js"></script> -->
+<script src="split.min.js"></script>
+<!-- <script async> -->
+<!--     interact('#topPane') -->
+<!--         .resizable({ -->
+<!--             edges: {bottom: true}, -->
+<!--             restrictEdges: { -->
+<!--                 outer: 'parent', -->
+<!--                 endOnly: true, -->
+<!--             }, -->
+<!--         }) -->
+<!--         .on('resizemove', event => { -->
+<!--             event.target.style.height = event.rect.height + 'px' -->
+<!--         }) -->
+<!-- </script> -->
+<!-- HEAD_CONTENT -->
+</head>
+<body>
+    <div id="topPane" class=split>
+        <button style="position: absolute; top: 20px; left: 20px;">Hello</button>
+        {{ map }}
+    </div>
+    <div id="bottomPane" class=split>
+        {{ plot }}
+        <p>Graph here</p>
+    </div>
+<script async>
+    Split(['#topPane', '#bottomPane'], {
+        direction: 'vertical',
+        snapOffset: 5,
+        minSize: 0,
+    })
+</script>
+</body>
