@@ -2,6 +2,7 @@ library(shiny)
 library(leaflet)
 library(leaflet.extras)
 library(plotly)
+library(sf)
 
 variables = c('# Journeys', '% Journeys', 'Health impact (total)', 'Health impact (pollution)')
 filters = c('mode', 'IMD', 'age', 'gender')
@@ -17,11 +18,16 @@ inputWidgets = inputPanel(
 # Get aggregated lines
 # Each segment will have a list of trips IDs that start, intersecting, or end in the segment
 # Table of trips relates trip ID to aggregate statistics
-load("../data/roads_sf.Rdata")
+#  load("../data/roads_sf.Rdata")
+load("../data/trips.export.RData")
+trips.export = st_as_sf(trips.export)
+trips.export$startDT = as.POSIXct(trips.export$startDT, format="%a %Y-%m-%d %H:%M:%S")
+trips.export$MET[is.na(trips.export$MET)] = 0
 
 # Get pollution raster for overlay
 load("../data/pollution_brick.RData")
 
+# extract raster
 
 updateOutputs = function(input, output, regions) {
 
@@ -34,6 +40,7 @@ updateOutputs = function(input, output, regions) {
   inner(input$variable, input$filter, input$split, regions, trips)
 }
 
+factpal = colorFactor(topo.colors(5), trips.export$modality)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -62,13 +69,13 @@ ui <- fluidPage(
 server <- function(input, output) {
 
    output$map <- renderLeaflet({
-     leaflet() %>%
+     leaflet(options = leafletOptions(preferCanvas = T)) %>%
        addProviderTiles(provider = "CartoDB.Positron") %>%
        setView(-1.61, 54.97, zoom = 13) %>%
        addDrawToolbar(targetGroup = 'draw', circleOptions = drawCircleOptions(), editOptions = editToolbarOptions()) %>%
        addLayersControl(overlayGroups = c("Pollution map")) %>%
-       addRasterImage(pollution_brick[[1]], group = "Pollution map", opacity = .4) %>%
-       addPolygons(data = roads)
+       addRasterImage(pollution_brick[[1]], group = "Pollution map", opacity = .4) # %>%
+       # addPolygons(data = roads, smoothFactor = 20)
    })
 
    #output$plot <- renderPlot({plot(rnorm(100))})
@@ -88,6 +95,22 @@ server <- function(input, output) {
 
      proxy = leafletProxy("map") %>%
        hideGroup(c("Pollution map"))
+
+     # Draw trips that
+     req(input$map_click)
+     latlong<- reactiveVal(value=input$map_click)
+     print(latlong)
+     buffer<- st_buffer(sf::st_point(c(latlong()$lng, latlong()$lat)), dist=0.00022, nQuadSegs=2)
+     inter<- st_intersects(buffer, trips.export)
+
+     lines.to.plot<- trips.export[inter[[1]],]
+
+     # This isn't an acceptable substitute. Don't understand why not.
+     # lines.to.plot<- st_intersection(trips.export, buf)
+
+     leafletProxy("map", data=lines.to.plot) %>%
+       clearShapes() %>%
+       addPolylines(color=factpal(lines.to.plot$modality))
    })
 }
 
