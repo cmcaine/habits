@@ -1,13 +1,15 @@
 library(shiny)
 library(leaflet)
 library(leaflet.extras)
-library(plotly)
+# library(plotly)
 library(sf)
+# library(tidyquant)
+library(ggplot2)
 
-variables = c('# Journeys', '% Journeys', 'Health impact (total)', 'Health impact (pollution)')
-filters = c('mode', 'IMD', 'age', 'gender')
+variables = c('# Journeys', '% Journeys', 'MET-h', 'Health impact (total)', 'Health impact (pollution)')
+filters = c('mode', 'IMD', 'age', 'gender', 'region')
 
-plot = plotlyOutput("plot", height="100%")
+plot = plotOutput("plot", height="100%")
 map = leafletOutput("map", height="100%")
 inputWidgets = inputPanel(
   selectInput('variable', 'variable', variables),
@@ -21,8 +23,13 @@ inputWidgets = inputPanel(
 #  load("../data/roads_sf.Rdata")
 load("../data/trips.export.RData")
 trips.export = st_as_sf(trips.export)
-trips.export$startDT = as.POSIXct(trips.export$startDT, format="%a %Y-%m-%d %H:%M:%S")
-trips.export$MET[is.na(trips.export$MET)] = 0
+trips.export$startDT = as.Date(trips.export$startDT, format="%a %Y-%m-%d %H:%M:%S")
+# Assign each trip to Thursday of the week its in.
+trips.export$startWeek = as.Date(strptime(strftime(trips.export$startDT, "%Y %W 4"), format = "%Y %W %u"))
+trips.export$MET[is.na(trips.export$MET)] = 0.1
+# Exclude rare modes
+modes = c("Bike", "Bus", "Car", "Foot", "Train")
+trips.export = trips.export[trips.export$modality %in% modes,]
 
 # Get pollution raster for overlay
 load("../data/pollution_brick.RData")
@@ -40,12 +47,48 @@ updateOutputs = function(input, output, regions) {
   inner(input$variable, input$filter, input$split, regions, trips)
 }
 
-factpal = colorFactor(topo.colors(5), trips.export$modality)
+factpal = colorFactor(rainbow(5), trips.export$modality)
+
+updatePlot = function(input, output, trips) {
+  if (input$variable == 'MET-h') {
+    # output$plot <- renderPlotly({plot_ly(tq_transmute(filtered, select = MET, mutate_fun = apply.weekly, FUN = mean), x = ~startDT, y = ~MET)})
+    # If we weren't given enough data, use the full set.
+    title = "Change in MET-h per mode over time (Region)"
+    if (nrow(trips) < 1) {
+      trips = trips.export
+      title = "Change in MET-h per mode over time (All data)"
+    }
+
+    plot = (ggplot(trips, aes(x = factor(startWeek), y = MET, color = modality))
+           + scale_y_log10()
+           + xlab("Start week")
+           + ylab("MET-h")
+           + ggtitle(title))
+
+    if (nrow(subset(trips, MET > 0.1)) > 500) {
+      plot = plot + geom_violin(data = subset(trips, MET > 0.1))
+    } else {
+      plot = plot + geom_jitter(height = 0)
+    }
+
+    plot = plot + geom_smooth(method = 'lm', aes(group = 1, color = "All modes"))
+
+    if (nrow(trips) > 500) {
+      plot = plot + geom_smooth(method = 'lm', aes(group = modality))
+    }
+
+    output$plot = renderPlot(plot)
+  } else { #(input$variable == '# Journeys') {
+    freq = count(data.frame(week = trips$startWeek, modality = trips$modality), week, modality)
+    output$plot = renderPlot({ggbarplot(freq, x = 'week', y = 'n', color = 'modality')})
+  }
+}
+
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
 
-   titlePanel("HABITS Decision Support Tool"),
+  # titlePanel("HABITS Decision Support Tool"),
 
    fluidRow(
      column(2, inputWidgets),
@@ -78,8 +121,9 @@ server <- function(input, output) {
        # addPolygons(data = roads, smoothFactor = 20)
    })
 
-   #output$plot <- renderPlot({plot(rnorm(100))})
-   output$plot <- renderPlotly({plot_ly(data.frame(1:100, rnorm(100)), x = ~X1.100, y = ~rnorm.100.)})
+   filtered = trips.export
+
+   updatePlot(data.frame(variable = c('# Journeys')), output, filtered)
 
    observe({
      # If required, be more efficient and have different observers for different kinds of event
@@ -92,6 +136,7 @@ server <- function(input, output) {
        # Add to region list
 
      # updateOutputs(input, output, regions)
+     updatePlot(input, output, filtered)
 
      proxy = leafletProxy("map") %>%
        hideGroup(c("Pollution map"))
@@ -103,15 +148,22 @@ server <- function(input, output) {
      buffer<- st_buffer(sf::st_point(c(latlong()$lng, latlong()$lat)), dist=0.00022, nQuadSegs=2)
      inter<- st_intersects(buffer, trips.export)
 
-     lines.to.plot<- trips.export[inter[[1]],]
+     filtered <<- trips.export[inter[[1]],]
+     # filtered = filtered[filtered$modality %in% c("Bike", "Foot"),]
 
      # This isn't an acceptable substitute. Don't understand why not.
-     # lines.to.plot<- st_intersection(trips.export, buf)
+     # filtered<- st_intersection(trips.export, buf)
 
-     leafletProxy("map", data=lines.to.plot) %>%
-       clearShapes() %>%
-       addPolylines(color=factpal(lines.to.plot$modality))
+     if (nrow(filtered) > 0) {
+       leafletProxy("map", data=filtered) %>%
+         clearShapes() %>%
+         addPolylines(color=factpal(filtered$modality), label=filtered$modality)
+     }
    })
+
+   #observe({
+   #  req(input$variable)
+   #})
 }
 
 # Run the application
