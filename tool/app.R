@@ -5,6 +5,7 @@ library(leaflet.extras)
 library(sf)
 # library(tidyquant)
 library(ggplot2)
+library(dplyr)
 
 variables = c('# Journeys', '% Journeys', 'MET-h', 'Health impact (total)', 'Health impact (pollution)')
 filters = c('mode', 'IMD', 'age', 'gender', 'region')
