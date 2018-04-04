@@ -13,6 +13,6 @@ for (LA in c("E08000020", "E08000021", "E08000022", "E08000023", "E08000024")) {
 # rbind
 combined_lsoas = do.call(rbind, lsoas)
 
-save(combined_lsoas, file = "../data/combined_lsoas.RData")
+save(combined_lsoas, file = "data/combined_lsoas.RData")
 
 rm(list = ls())

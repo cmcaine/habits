@@ -7,17 +7,7 @@ library(sf)
 library(ggplot2)
 library(dplyr)
 
-variables = c('# Journeys', '% Journeys', 'MET-h', 'Health impact (total)', 'Health impact (pollution)')
-filters = c('region')
-splits = c('modality', 'IMD', 'age', 'gender', 'region')
-
-plot = plotOutput("plot", height="100%")
-map = leafletOutput("map", height="100%")
-inputWidgets = inputPanel(
-  selectInput('variable', 'variable', variables),
-  selectInput('filter', 'filter', filters),
-  selectInput('split', 'split', splits)
-)
+### Load and prepare data ###
 
 # Get aggregated lines
 # Each segment will have a list of trips IDs that start, intersecting, or end in the segment
@@ -39,7 +29,8 @@ load("../data/pollution_brick.RData")
 # Get LSOAs for chloropleth
 load("../data/combined_lsoas.RData")
 
-# extract raster
+
+### Update logic ###
 
 updateOutputs = function(input, output, regions) {
 
@@ -101,10 +92,26 @@ updatePlot = function(input, output, trips) {
   output$plot = renderPlot(plot)
 }
 
-trips = trips.export
 
 
-# Define UI for application that draws a histogram
+### Define UI ###
+
+variables = c('# Journeys', '% Journeys', 'MET-h', 'Health impact (total)', 'Health impact (pollution)')
+filters = c('region')
+splits = c('modality', 'IMD', 'age', 'gender', 'region')
+
+inputWidgets = inputPanel(
+  selectInput('variable', 'variable', variables),
+  selectInput('filter', 'filter', filters),
+  selectInput('split', 'split', splits),
+  conditionalPanel('document.querySelector(\'[aria-expanded="true"][data-value="before and after"][data-toggle="tab"]\') !== null',
+                   dateInput('before_after_date', 'intervention date'))
+)
+
+plot = plotOutput("plot", height="100%")
+map = leafletOutput("map", height="100%")
+before_after_plot = plotOutput("before_after_plot", height="100%")
+
 ui <- fluidPage(
 
   # titlePanel("HABITS Decision Support Tool"),
@@ -114,7 +121,8 @@ ui <- fluidPage(
      column(10,
             tabsetPanel(
               tabPanel("map", map),
-              tabPanel("plot", plot)
+              tabPanel("plot", plot),
+              tabPanel("before and after", before_after_plot)
             )
      )
    ),
@@ -127,68 +135,91 @@ ui <- fluidPage(
 # Alternative entirely custom version
 # ui <- htmlTemplate(filename = "www/split-pane-template.html", map = map, plot = plot)
 
+
+### Server-side logic (setup and observers) ###
+
 # Draw the map and plot and react to changes in inputs, map draw events, etc.
 server <- function(input, output) {
 
+  addLSOAs <- function(map, data=combined_lsoas, ...) {
+    addPolygons(map, data = data, group = "LSOAs", layerId = ~LSOA11CD, weight = 2, ...)
+  }
+
    output$map <- renderLeaflet({
-     leaflet(options = leafletOptions(preferCanvas = T)) %>%
+     map = leaflet(options = leafletOptions(preferCanvas = T)) %>%
        addProviderTiles(provider = "CartoDB.Positron") %>%
        setView(-1.61, 54.97, zoom = 13) %>%
        addDrawToolbar(targetGroup = 'draw', circleOptions = drawCircleOptions(), editOptions = editToolbarOptions()) %>%
        addLayersControl(overlayGroups = c("Pollution map", "LSOAs")) %>%
        addRasterImage(pollution_brick[[1]], group = "Pollution map", opacity = .4) %>%
-       addPolygons(data = combined_lsoas, group = "LSOAs") %>%
+       addLSOAs() %>%
        hideGroup(c("Pollution map", "LSOAs"))
        # addPolygons(data = roads, smoothFactor = 20)
    })
 
    filtered = trips.export
 
-   updatePlot(data.frame(variable = c('# Journeys')), output, filtered)
+   # updatePlot(data.frame(variable = c('# Journeys')), output, filtered)
 
-   observe({
-     # If required, be more efficient and have different observers for different kinds of event
-     # (e.g. don't filter the trips unless the filter or region have changed)
-       # Act iff a region has just been drawn
-       # req(input$map_draw_stop)
+   # Use an empty df of the right shape initially.
+   regions = subset(combined_lsoas, F)
 
-     # For each region in 'draw':
-       # Convert region to sf
-       # Add to region list
+   # Update regions on click
+   observeEvent(input$map_shape_click, {
+     # Uncolour currently selected regions
+     leafletProxy("map") %>%
+       addLSOAs(regions)
 
+     # Update regions var.
+     regions <<- subset(combined_lsoas, id == input$map_shape_click$id)
 
-     # proxy = leafletProxy("map") %>%
-     #   hideGroup(c("Pollution map", "LSOAs"))
+     # Highlight selected regions.
+     leafletProxy("map") %>%
+       addLSOAs(regions, fillColor = 'red')
 
-     # updateOutputs(input, output, regions)
-     #updatePlot(input, output, filtered)
-
-     # Draw trips that
-     if (isTruthy(input$map_click)) {
-       latlong<- reactiveVal(value=input$map_click)
-       print(latlong)
-       buffer<- st_buffer(sf::st_point(c(latlong()$lng, latlong()$lat)), dist=0.00022, nQuadSegs=2)
-       inter<- st_intersects(buffer, trips.export)
-
-       filtered <<- trips.export[inter[[1]],]
-       # filtered = filtered[filtered$modality %in% c("Bike", "Foot"),]
-
-       # This isn't an acceptable substitute. Don't understand why not.
-       # filtered<- st_intersection(trips.export, buf)
-
-       if (nrow(filtered) > 0) {
-         leafletProxy("map", data=filtered) %>%
-           clearGroup('routes') %>%
-           addPolylines(color=factpal(filtered$modality), label=filtered$modality, group = 'routes')
-       }
-     }
-
-     updatePlot(input, output, filtered)
+     # Update everything else
+     # update(input, output, regions)
    })
 
-   #observe({
-   #  req(input$variable)
-   #})
+   # observe({
+   #   # If required, be more efficient and have different observers for different kinds of event
+   #   # (e.g. don't filter the trips unless the filter or region have changed)
+   #     # Act iff a region has just been drawn
+   #     # req(input$map_draw_stop)
+   #
+   #   # For each region in 'draw':
+   #     # Convert region to sf
+   #     # Add to region list
+   #
+   #
+   #   # proxy = leafletProxy("map") %>%
+   #   #   hideGroup(c("Pollution map", "LSOAs"))
+   #
+   #   # updateOutputs(input, output, regions)
+   #   #updatePlot(input, output, filtered)
+   #
+   #   # Draw trips that
+   #   if (isTruthy(input$map_click)) {
+   #     latlong<- reactiveVal(value=input$map_click)
+   #     print(latlong)
+   #     buffer<- st_buffer(sf::st_point(c(latlong()$lng, latlong()$lat)), dist=0.00022, nQuadSegs=2)
+   #     inter<- st_intersects(buffer, trips.export)
+   #
+   #     filtered <<- trips.export[inter[[1]],]
+   #     # filtered = filtered[filtered$modality %in% c("Bike", "Foot"),]
+   #
+   #     # This isn't an acceptable substitute. Don't understand why not.
+   #     # filtered<- st_intersection(trips.export, buf)
+   #
+   #     if (nrow(filtered) > 0) {
+   #       leafletProxy("map", data=filtered) %>%
+   #         clearGroup('routes') %>%
+   #         addPolylines(color=factpal(filtered$modality), label=filtered$modality, group = 'routes')
+   #     }
+   #   }
+   #
+   #   updatePlot(input, output, filtered)
+   # })
 }
 
 # Run the application
