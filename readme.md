@@ -205,7 +205,7 @@ Other questions by Scatter of $var against $var using time series as data source
  - What kind of people respond best to intervention X?
  - Do people living near this train station cycle to local places and drive to the city centre?
  - Has travel on this route increased relative to other routes in the region?
- - What is the demand model for a locality?
+ - What is the demand model for a locality (especially active modes)?
  - What is the decay rate of the effectiveness of an intervention?
  - Can we assess the value for money of an existing or in-progress scheme?
 
