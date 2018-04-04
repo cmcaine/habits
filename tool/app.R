@@ -8,14 +8,15 @@ library(ggplot2)
 library(dplyr)
 
 variables = c('# Journeys', '% Journeys', 'MET-h', 'Health impact (total)', 'Health impact (pollution)')
-filters = c('mode', 'IMD', 'age', 'gender', 'region')
+filters = c('region')
+splits = c('modality', 'IMD', 'age', 'gender', 'region')
 
 plot = plotOutput("plot", height="100%")
 map = leafletOutput("map", height="100%")
 inputWidgets = inputPanel(
   selectInput('variable', 'variable', variables),
   selectInput('filter', 'filter', filters),
-  selectInput('split', 'split', filters)
+  selectInput('split', 'split', splits)
 )
 
 # Get aggregated lines
@@ -35,6 +36,9 @@ trips.export = trips.export[trips.export$modality %in% modes,]
 # Get pollution raster for overlay
 load("../data/pollution_brick.RData")
 
+# Get LSOAs for chloropleth
+load("../data/combined_lsoas.RData")
+
 # extract raster
 
 updateOutputs = function(input, output, regions) {
@@ -51,15 +55,19 @@ updateOutputs = function(input, output, regions) {
 factpal = colorFactor(rainbow(5), trips.export$modality)
 
 updatePlot = function(input, output, trips) {
-  if (input$variable == 'MET-h') {
-    # output$plot <- renderPlotly({plot_ly(tq_transmute(filtered, select = MET, mutate_fun = apply.weekly, FUN = mean), x = ~startDT, y = ~MET)})
-    # If we weren't given enough data, use the full set.
-    title = "Change in MET-h per mode over time (Region)"
-    if (nrow(trips) < 1) {
-      trips = trips.export
-      title = "Change in MET-h per mode over time (All data)"
-    }
+  # If we weren't given enough data, use the full set.
+  if (nrow(trips) < 1) {
+    trips = trips.export
+  }
 
+  if (nrow(trips) == nrow(trips.export)) {
+    title = "(All data)"
+  } else {
+    title = "(Region)"
+  }
+
+  if (input$variable == 'MET-h') {
+    title = paste("Change in MET-h per mode over time", title)
     plot = (ggplot(trips, aes(x = factor(startWeek), y = MET, color = modality))
            + scale_y_log10()
            + xlab("Start week")
@@ -77,13 +85,23 @@ updatePlot = function(input, output, trips) {
     if (nrow(trips) > 500) {
       plot = plot + geom_smooth(method = 'lm', aes(group = modality))
     }
-
-    output$plot = renderPlot(plot)
-  } else { #(input$variable == '# Journeys') {
+  } else if (input$variable == '# Journeys') {
+    title = paste("Number of Journeys by mode per week", title)
     freq = count(data.frame(week = trips$startWeek, modality = trips$modality), week, modality)
-    output$plot = renderPlot({ggbarplot(freq, x = 'week', y = 'n', color = 'modality')})
+    plot = (ggplot(freq, aes(x = week, y = n, fill = modality))
+      + geom_bar(stat = 'identity')
+      + ggtitle(title))
+  } else if (input$variable == '% Journeys') {
+    title = paste("Number of Journeys by mode per week", title)
+    freq = count(data.frame(week = trips$startWeek, modality = trips$modality), week, modality)
+    plot = (ggplot(freq, aes(x = week, y = n, fill = modality))
+      + geom_bar(position = 'fill', stat = 'identity')
+      + ggtitle(title))
   }
+  output$plot = renderPlot(plot)
 }
+
+trips = trips.export
 
 
 # Define UI for application that draws a histogram
@@ -117,8 +135,10 @@ server <- function(input, output) {
        addProviderTiles(provider = "CartoDB.Positron") %>%
        setView(-1.61, 54.97, zoom = 13) %>%
        addDrawToolbar(targetGroup = 'draw', circleOptions = drawCircleOptions(), editOptions = editToolbarOptions()) %>%
-       addLayersControl(overlayGroups = c("Pollution map")) %>%
-       addRasterImage(pollution_brick[[1]], group = "Pollution map", opacity = .4) # %>%
+       addLayersControl(overlayGroups = c("Pollution map", "LSOAs")) %>%
+       addRasterImage(pollution_brick[[1]], group = "Pollution map", opacity = .4) %>%
+       addPolygons(data = combined_lsoas, group = "LSOAs") %>%
+       hideGroup(c("Pollution map", "LSOAs"))
        # addPolygons(data = roads, smoothFactor = 20)
    })
 
@@ -136,30 +156,34 @@ server <- function(input, output) {
        # Convert region to sf
        # Add to region list
 
-     # updateOutputs(input, output, regions)
-     updatePlot(input, output, filtered)
 
-     proxy = leafletProxy("map") %>%
-       hideGroup(c("Pollution map"))
+     # proxy = leafletProxy("map") %>%
+     #   hideGroup(c("Pollution map", "LSOAs"))
+
+     # updateOutputs(input, output, regions)
+     #updatePlot(input, output, filtered)
 
      # Draw trips that
-     req(input$map_click)
-     latlong<- reactiveVal(value=input$map_click)
-     print(latlong)
-     buffer<- st_buffer(sf::st_point(c(latlong()$lng, latlong()$lat)), dist=0.00022, nQuadSegs=2)
-     inter<- st_intersects(buffer, trips.export)
+     if (isTruthy(input$map_click)) {
+       latlong<- reactiveVal(value=input$map_click)
+       print(latlong)
+       buffer<- st_buffer(sf::st_point(c(latlong()$lng, latlong()$lat)), dist=0.00022, nQuadSegs=2)
+       inter<- st_intersects(buffer, trips.export)
 
-     filtered <<- trips.export[inter[[1]],]
-     # filtered = filtered[filtered$modality %in% c("Bike", "Foot"),]
+       filtered <<- trips.export[inter[[1]],]
+       # filtered = filtered[filtered$modality %in% c("Bike", "Foot"),]
 
-     # This isn't an acceptable substitute. Don't understand why not.
-     # filtered<- st_intersection(trips.export, buf)
+       # This isn't an acceptable substitute. Don't understand why not.
+       # filtered<- st_intersection(trips.export, buf)
 
-     if (nrow(filtered) > 0) {
-       leafletProxy("map", data=filtered) %>%
-         clearShapes() %>%
-         addPolylines(color=factpal(filtered$modality), label=filtered$modality)
+       if (nrow(filtered) > 0) {
+         leafletProxy("map", data=filtered) %>%
+           clearGroup('routes') %>%
+           addPolylines(color=factpal(filtered$modality), label=filtered$modality, group = 'routes')
+       }
      }
+
+     updatePlot(input, output, filtered)
    })
 
    #observe({
