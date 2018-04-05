@@ -45,7 +45,7 @@ updateOutputs = function(input, output, regions) {
 
 factpal = colorFactor(rainbow(5), trips.export$modality)
 
-updatePlot = function(input, output, trips) {
+updatePlot2 = function(input, output, trips) {
   # If we weren't given enough data, use the full set.
   if (nrow(trips) < 1) {
     trips = trips.export
@@ -93,10 +93,92 @@ updatePlot = function(input, output, trips) {
 }
 
 
+update <- function(input, output, regions) {
+  #
+  print("Updating")
+  # Filter trips.export to match input$filter
+  trips = filterTrips(input$filter, regions)
+  output$plot = updatePlot(input$variable, trips, ~(factor(startWeek)), "Start week")
+  subd = substitute(~(startDT < intervention_date), list(intervention_date = input$intervention_date))
+  print(subd)
+  print(as.POSIXct(input$intervention_date))
+  output$before_after_plot = updatePlot(input$variable, trips, subd, "Before intervention")
+  updateMap("map", input$variable, trips)
+}
+
+# NB: this can be a reactive value to avoid recomputation
+filterTrips <- function(filter, regions) {
+  # Return a subset of trips.export
+  if (filter == "region") {
+    if (nrow(regions) > 0) {
+      inter = st_intersects(regions, trips.export)[[1]]
+      if (length(inter) != 0) {
+        trips.export[inter,]
+      }
+    } else {
+      subset(trips.export, F)
+    }
+  } else {
+    print("Unknown filter!")
+  }
+}
+
+plotMeta = data.frame(
+  variable = c('MET-h', '# Journeys', '% Journeys'),
+  title = c(
+    "Change in MET-h per mode over time",
+    "Number of Journeys by mode per week",
+    "Proportion of Journeys by mode per week"
+  ),
+  row.names = 'variable'
+)
+
+updatePlot <- function(variable, trips, xaxis, xlabel) {
+  # Prepare a ggplot according to variable and xaxis
+  if (nrow(trips) < 1) {
+    trips = trips.export
+  }
+
+  if (nrow(trips) == nrow(trips.export)) {
+    title = "(All data)"
+  } else {
+    title = "(Region)"
+  }
+
+  plot = switch(as.character(variable),
+                'MET-h' = (ggplot(trips, aes_(x = xaxis, y = ~MET, color = ~modality))
+                           + scale_y_log10()
+                           + geom_violin(data = subset(trips, MET > 0.1))
+                           + geom_smooth(method = 'lm', aes(group = 1, color = "All modes"))
+                ),
+                '# Journeys' = (ggplot(trips, aes_(x = xaxis, fill = ~modality))
+                                + geom_histogram(stat = "count")
+                                ),
+                '% Journeys' = (ggplot(trips, aes_(x = xaxis, fill = ~modality))
+                                + geom_histogram(stat = "count", position = "fill"))
+  )
+
+  plot = plot + xlab(xlabel) + ylab(variable) + ggtitle(paste(plotMeta[variable, 'title'], title))
+
+  # Render it to outPlot
+  renderPlot(plot)
+}
+
+updateMap <- function(mapref, variable, trips) {
+  # Redraw routes, coloured by $variable
+  if (nrow(trips) > 0) {
+    leafletProxy(mapref, data=trips) %>%
+      clearGroup('routes') %>%
+      addPolylines(color=factpal(trips$modality), label=trips$modality, group = 'routes')
+  }
+}
+
+
+
 
 ### Define UI ###
 
-variables = c('# Journeys', '% Journeys', 'MET-h', 'Health impact (total)', 'Health impact (pollution)')
+variables = c('# Journeys', '% Journeys', 'MET-h') #, 'Health impact (total)', 'Health impact (pollution)')
 filters = c('region')
 splits = c('modality', 'IMD', 'age', 'gender', 'region')
 
@@ -105,7 +187,7 @@ inputWidgets = inputPanel(
   selectInput('filter', 'filter', filters),
   selectInput('split', 'split', splits),
   conditionalPanel('document.querySelector(\'[aria-expanded="true"][data-value="before and after"][data-toggle="tab"]\') !== null',
-                   dateInput('before_after_date', 'intervention date'))
+                   dateInput('intervention_date', 'intervention date'))
 )
 
 plot = plotOutput("plot", height="100%")
@@ -178,8 +260,12 @@ server <- function(input, output) {
        addLSOAs(regions, fillColor = 'red')
 
      # Update everything else
-     # update(input, output, regions)
+     update(input, output, regions)
    })
+
+   observe({update(input, output, regions)})
+
+   # update(data.frame(variable = c('# Journeys'), filter = c('region')), output, regions)
 
    # observe({
    #   # If required, be more efficient and have different observers for different kinds of event
