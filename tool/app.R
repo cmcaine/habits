@@ -54,54 +54,6 @@ updateOutputs = function(input, output, regions) {
 
 factpal = colorFactor(rainbow(5), trips.export$modality)
 
-updatePlot2 = function(input, output, trips) {
-  # If we weren't given enough data, use the full set.
-  if (nrow(trips) < 1) {
-    trips = trips.export
-  }
-
-  if (nrow(trips) == nrow(trips.export)) {
-    title = "(All data)"
-  } else {
-    title = "(Region)"
-  }
-
-  if (input$variable == 'MET-h') {
-    title = paste("Change in MET-h per mode over time", title)
-    plot = (ggplot(trips, aes(x = factor(startWeek), y = MET, color = modality))
-           + scale_y_log10()
-           + xlab("Start week")
-           + ylab("MET-h")
-           + ggtitle(title))
-
-    if (nrow(subset(trips, MET > 0.1)) > 500) {
-      plot = plot + geom_violin(data = subset(trips, MET > 0.1))
-    } else {
-      plot = plot + geom_jitter(height = 0)
-    }
-
-    plot = plot + geom_smooth(method = 'lm', aes(group = 1, color = "All modes"))
-
-    if (nrow(trips) > 500) {
-      plot = plot + geom_smooth(method = 'lm', aes(group = modality))
-    }
-  } else if (input$variable == '# Journeys') {
-    title = paste("Number of Journeys by mode per week", title)
-    freq = count(data.frame(week = trips$startWeek, modality = trips$modality), week, modality)
-    plot = (ggplot(freq, aes(x = week, y = n, fill = modality))
-      + geom_bar(stat = 'identity')
-      + ggtitle(title))
-  } else if (input$variable == '% Journeys') {
-    title = paste("Number of Journeys by mode per week", title)
-    freq = count(data.frame(week = trips$startWeek, modality = trips$modality), week, modality)
-    plot = (ggplot(freq, aes(x = week, y = n, fill = modality))
-      + geom_bar(position = 'fill', stat = 'identity')
-      + ggtitle(title))
-  }
-  output$plot = renderPlot(plot)
-}
-
-
 update <- function(input, output, regions) {
   # Update map and both plots. Bit expensive, could be a reactive expression
   print("Updating")
