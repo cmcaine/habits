@@ -1,11 +1,16 @@
+# Complete shiny app for the HABITS DST.
+#
+# You might need to do setwd("tool") before you run it.
+
 library(shiny)
 library(leaflet)
+# Install my fork
+# devtools::install_github("cmcaine/leaflet.extras")
 library(leaflet.extras)
-# library(plotly)
 library(sf)
-# library(tidyquant)
 library(ggplot2)
 library(dplyr)
+library(jsonlite)
 
 ### Load and prepare data ###
 
@@ -22,13 +27,17 @@ trips.export$MET[is.na(trips.export$MET)] = 0.1
 # Exclude rare modes
 modes = c("Bike", "Bus", "Car", "Foot", "Train")
 trips.export = trips.export[trips.export$modality %in% modes,]
+st_crs(trips.export)<-4326
+
 
 # Get pollution raster for overlay
 load("../data/pollution_brick.RData")
 
 # Get LSOAs for chloropleth
 load("../data/combined_lsoas.RData")
-
+combined_lsoas = subset(combined_lsoas, select = c('id', 'LSOA11NM', 'geometry')) %>% rename(label = LSOA11NM)
+combined_lsoas$group = factor("LSOAs")
+st_crs(combined_lsoas)<-4326
 
 ### Update logic ###
 
@@ -94,15 +103,13 @@ updatePlot2 = function(input, output, trips) {
 
 
 update <- function(input, output, regions) {
-  #
+  # Update map and both plots. Bit expensive, could be a reactive expression
   print("Updating")
   # Filter trips.export to match input$filter
   trips = filterTrips(input$filter, regions)
-  output$plot = updatePlot(input$variable, trips, ~(factor(startWeek)), "Start week")
-  subd = substitute(~(startDT < intervention_date), list(intervention_date = input$intervention_date))
-  print(subd)
-  print(as.POSIXct(input$intervention_date))
-  output$before_after_plot = updatePlot(input$variable, trips, subd, "Before intervention")
+  output$plot = updatePlot(input$variable, trips, quote(factor(startWeek)), "Start week")
+  BA_xaxis = substitute(startDT < intervention_date, list(intervention_date = input$intervention_date))
+  output$before_after_plot = updatePlot(input$variable, trips, BA_xaxis, "Before intervention")
   updateMap("map", input$variable, trips)
 }
 
@@ -114,6 +121,8 @@ filterTrips <- function(filter, regions) {
       inter = st_intersects(regions, trips.export)[[1]]
       if (length(inter) != 0) {
         trips.export[inter,]
+      } else {
+        subset(trips.export, F)
       }
     } else {
       subset(trips.export, F)
@@ -146,11 +155,21 @@ updatePlot <- function(variable, trips, xaxis, xlabel) {
   }
 
   plot = switch(as.character(variable),
-                'MET-h' = (ggplot(trips, aes_(x = xaxis, y = ~MET, color = ~modality))
+                'MET-h' = {
+                  activeTrips = subset(trips, MET > 0.1)
+                  plot = (ggplot(trips, aes_(x = xaxis, y = ~MET, color = ~modality))
                            + scale_y_log10()
-                           + geom_violin(data = subset(trips, MET > 0.1))
-                           + geom_smooth(method = 'lm', aes(group = 1, color = "All modes"))
-                ),
+                           + geom_smooth(method = 'lm', aes(group = 1, color = "All modes")))
+
+                  if (nrow(trips) > 500) {
+                    plot = (plot + geom_violin(data = activeTrips)
+                            + geom_smooth(data = activeTrips, method = 'lm', aes(group = modality)))
+                  } else {
+                    plot = plot + geom_jitter(data = activeTrips, height = 0)
+                  }
+
+                  plot
+                },
                 '# Journeys' = (ggplot(trips, aes_(x = xaxis, fill = ~modality))
                                 + geom_histogram(stat = "count")
                                 ),
@@ -169,7 +188,7 @@ updateMap <- function(mapref, variable, trips) {
   if (nrow(trips) > 0) {
     leafletProxy(mapref, data=trips) %>%
       clearGroup('routes') %>%
-      addPolylines(color=factpal(trips$modality), label=trips$modality, group = 'routes')
+      addPolylines(color=factpal(trips$modality), label=trips$modality, popup = trips$modality, group = 'routes')
   }
 }
 
@@ -187,7 +206,7 @@ inputWidgets = inputPanel(
   selectInput('filter', 'filter', filters),
   selectInput('split', 'split', splits),
   conditionalPanel('document.querySelector(\'[aria-expanded="true"][data-value="before and after"][data-toggle="tab"]\') !== null',
-                   dateInput('intervention_date', 'intervention date'))
+                   dateInput('intervention_date', 'intervention date', value = "2017-08-01"))
 )
 
 plot = plotOutput("plot", height="100%")
@@ -224,7 +243,13 @@ ui <- fluidPage(
 server <- function(input, output) {
 
   addLSOAs <- function(map, data=combined_lsoas, ...) {
-    addPolygons(map, data = data, group = "LSOAs", layerId = ~LSOA11CD, weight = 2, ...)
+    addSelectableRegions(map, data = data, label = ~htmltools::htmlEscape(label), ...)
+  }
+
+  addSelectableRegions <- function(map, data, ...) {
+    # The labels are fussy
+    #   Warning: Error in sum: invalid 'type' (list) of argument
+    addPolygons(map, data = data, weight = 2, layerId = ~id, group = ~group, ...) #, label = htmltools::htmlEscape(data$label), ...)
   }
 
    output$map <- renderLeaflet({
@@ -234,7 +259,7 @@ server <- function(input, output) {
        addDrawToolbar(targetGroup = 'draw', circleOptions = drawCircleOptions(), editOptions = editToolbarOptions()) %>%
        addLayersControl(overlayGroups = c("Pollution map", "LSOAs")) %>%
        addRasterImage(pollution_brick[[1]], group = "Pollution map", opacity = .4) %>%
-       addLSOAs() %>%
+       addLSOAs(combined_lsoas) %>%
        hideGroup(c("Pollution map", "LSOAs"))
        # addPolygons(data = roads, smoothFactor = 20)
    })
@@ -245,15 +270,40 @@ server <- function(input, output) {
 
    # Use an empty df of the right shape initially.
    regions = subset(combined_lsoas, F)
+   drawn_shapes = regions
+
+   # Update drawn_shapes
+   observeEvent(input$map_draw_all_features, {
+     if (length(input$map_draw_all_features$features) > 0) {
+       drawn_shapes <<- read_sf(toJSON(input$map_draw_all_features, force=T, auto_unbox = T)) %>%
+         rename(id = X_leaflet_id) %>% cbind(list(., group="draw", label=.$id))
+     }
+   })
+
+   # observeEvent(input$map_draw_new_feature, {
+   #   shape = read_sf(toJSON(input$map_draw_new_feature, force=T, auto_unbox = T)) %>%
+   #       rename(id = X_leaflet_id) %>% cbind(list(., group="draw", label=.$id))
+   #   leafletProxy("map") %>%
+   #     removeShape(shape$id) %>%
+   #     addSelectableRegions(shape)
+   # })
 
    # Update regions on click
    observeEvent(input$map_shape_click, {
-     # Uncolour currently selected regions
-     leafletProxy("map") %>%
-       addLSOAs(regions)
+
+     print(input$map_shape_click)
+
+     if (nrow(regions) > 0) {
+       # Uncolour currently selected regions
+       leafletProxy("map") %>%
+         addLSOAs(regions)
+     }
 
      # Update regions var.
-     regions <<- subset(combined_lsoas, id == input$map_shape_click$id)
+     regions <<- switch(input$map_shape_click$group,
+       "LSOAs" = subset(combined_lsoas, id == input$map_shape_click$id),
+       "draw" = subset(drawn_shapes, id == input$map_shape_click$id),
+     )
 
      # Highlight selected regions.
      leafletProxy("map") %>%
