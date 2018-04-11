@@ -268,46 +268,6 @@ server <- function(input, output) {
    observe({update(input, output, regions)})
 
    # update(data.frame(variable = c('# Journeys'), filter = c('region')), output, regions)
-
-   # observe({
-   #   # If required, be more efficient and have different observers for different kinds of event
-   #   # (e.g. don't filter the trips unless the filter or region have changed)
-   #     # Act iff a region has just been drawn
-   #     # req(input$map_draw_stop)
-   #
-   #   # For each region in 'draw':
-   #     # Convert region to sf
-   #     # Add to region list
-   #
-   #
-   #   # proxy = leafletProxy("map") %>%
-   #   #   hideGroup(c("Pollution map", "LSOAs"))
-   #
-   #   # updateOutputs(input, output, regions)
-   #   #updatePlot(input, output, filtered)
-   #
-   #   # Draw trips that
-   #   if (isTruthy(input$map_click)) {
-   #     latlong<- reactiveVal(value=input$map_click)
-   #     print(latlong)
-   #     buffer<- st_buffer(sf::st_point(c(latlong()$lng, latlong()$lat)), dist=0.00022, nQuadSegs=2)
-   #     inter<- st_intersects(buffer, trips.export)
-   #
-   #     filtered <<- trips.export[inter[[1]],]
-   #     # filtered = filtered[filtered$modality %in% c("Bike", "Foot"),]
-   #
-   #     # This isn't an acceptable substitute. Don't understand why not.
-   #     # filtered<- st_intersection(trips.export, buf)
-   #
-   #     if (nrow(filtered) > 0) {
-   #       leafletProxy("map", data=filtered) %>%
-   #         clearGroup('routes') %>%
-   #         addPolylines(color=factpal(filtered$modality), label=filtered$modality, group = 'routes')
-   #     }
-   #   }
-   #
-   #   updatePlot(input, output, filtered)
-   # })
 }
 
 # Run the application
