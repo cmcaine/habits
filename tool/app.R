@@ -14,12 +14,27 @@ library(jsonlite)
 
 ### Load and prepare data ###
 
+# Crop a Simple Features Data Frame to the extent of a raster
+crop.sf <- function(sfdf, rasta) {
+  # Get extent and crs
+  ext.sp <- as(extent(rasta), "SpatialPolygons")
+  crs(ext.sp) <- crs(rasta)
+
+  # crop
+  st_intersection(sfdf, st_as_sf(ext.sp))
+}
+
+# Get pollution raster for overlay
+load("../data/pollution_brick.RData")
+
 # Get aggregated lines
 # Each segment will have a list of trips IDs that start, intersecting, or end in the segment
 # Table of trips relates trip ID to aggregate statistics
 #  load("../data/roads_sf.Rdata")
 load("../data/trips.export.RData")
+# trips.export = crop(trips.export, pollution_brick)
 trips.export = st_as_sf(trips.export)
+# trips.export = crop.sf(trips.export, pollution_brick)
 trips.export$startDT = as.Date(trips.export$startDT, format="%a %Y-%m-%d %H:%M:%S")
 # Assign each trip to Thursday of the week its in.
 trips.export$startWeek = as.Date(strptime(strftime(trips.export$startDT, "%Y %W 4"), format = "%Y %W %u"))
@@ -30,14 +45,12 @@ trips.export = trips.export[trips.export$modality %in% modes,]
 st_crs(trips.export)<-4326
 
 
-# Get pollution raster for overlay
-load("../data/pollution_brick.RData")
-
 # Get LSOAs for chloropleth
 load("../data/combined_lsoas.RData")
 combined_lsoas = subset(combined_lsoas, select = c('id', 'LSOA11NM', 'geometry')) %>% rename(label = LSOA11NM)
 combined_lsoas$group = factor("LSOAs")
 st_crs(combined_lsoas)<-4326
+
 
 ### Update logic ###
 
