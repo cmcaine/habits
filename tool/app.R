@@ -44,14 +44,15 @@ modes = c("Bike", "Bus", "Car", "Foot", "Train")
 trips.export = trips.export[trips.export$modality %in% modes,]
 st_crs(trips.export)<-4326
 
-
 # Get LSOAs for chloropleth
 load("../data/combined_lsoas.RData")
 combined_lsoas = subset(combined_lsoas, select = c('id', 'LSOA11NM', 'geometry')) %>% rename(label = LSOA11NM)
 combined_lsoas$group = factor("LSOAs")
 st_crs(combined_lsoas)<-4326
 
+# Colours and theming
 cbbPalette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+theme_update(text = element_text(size = 20))
 
 ### Update logic ###
 
