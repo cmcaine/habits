@@ -5,7 +5,7 @@
 library(shiny)
 library(leaflet)
 # Install my fork
-devtools::install_github("cmcaine/leaflet.extras")
+# devtools::install_github("cmcaine/leaflet.extras")
 library(leaflet.extras)
 library(sf)
 library(ggplot2)
@@ -51,6 +51,7 @@ combined_lsoas = subset(combined_lsoas, select = c('id', 'LSOA11NM', 'geometry')
 combined_lsoas$group = factor("LSOAs")
 st_crs(combined_lsoas)<-4326
 
+cbbPalette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 
 ### Update logic ###
 
@@ -64,8 +65,6 @@ updateOutputs = function(input, output, regions) {
 
   inner(input$variable, input$filter, input$split, regions, trips)
 }
-
-factpal = colorFactor(rainbow(5), trips.export$modality)
 
 update <- function(input, output, regions) {
   # Update map and both plots. Bit expensive, could be a reactive expression
@@ -124,7 +123,7 @@ updatePlot <- function(variable, trips, xaxis, xlabel) {
                   activeTrips = subset(trips, MET > 0.1)
                   plot = (ggplot(trips, aes_(x = xaxis, y = ~MET, color = ~modality))
                            + scale_y_log10()
-                           + geom_smooth(method = 'lm', aes(group = 1, color = "All modes")))
+                          )
 
                   if (nrow(trips) > 500) {
                     plot = (plot + geom_violin(data = activeTrips)
@@ -133,13 +132,16 @@ updatePlot <- function(variable, trips, xaxis, xlabel) {
                     plot = plot + geom_jitter(data = activeTrips, height = 0)
                   }
 
-                  plot
+                  plot + scale_linetype_manual(values = cbbPalette) + geom_smooth(method = 'lm', aes(group = 1, color = "All modes"))
                 },
                 '# Journeys' = (ggplot(trips, aes_(x = xaxis, fill = ~modality))
                                 + geom_histogram(stat = "count")
+                                + scale_fill_manual(values = cbbPalette)
                                 ),
                 '% Journeys' = (ggplot(trips, aes_(x = xaxis, fill = ~modality))
-                                + geom_histogram(stat = "count", position = "fill"))
+                                + geom_histogram(stat = "count", position = "fill")
+                                + scale_fill_manual(values = cbbPalette)
+                                )
   )
 
   plot = plot + xlab(xlabel) + ylab(variable) + ggtitle(paste(plotMeta[variable, 'title'], title))
@@ -148,12 +150,29 @@ updatePlot <- function(variable, trips, xaxis, xlabel) {
   renderPlot(plot)
 }
 
+# Partial application of $
+cg <- function (name) {
+  function (df) { df[[name]] }
+}
+
+mapMeta = list(
+  "MET-h" = list(col = function(trips) {log(trips$MET)}, pal = colorNumeric(palette = "RdBu", domain = log(trips.export$MET))),
+  "# Journeys" = list(col = cg("modality"), pal = colorFactor(cbbPalette, trips.export$modality)),
+  "% Journeys" = list(col = cg("modality"), pal = colorFactor(cbbPalette, trips.export$modality))
+)
+
+addTrips <- function (map, trips, variable) {
+  meta <- mapMeta[[variable]]
+  col <- meta$col(trips)
+  addPolylines(map, group = "routes", data = trips, color = meta$pal(col), label = col) %>%
+    addLegend("bottomright", pal = meta$pal, values = col, layerId = "routesLegend")
+}
+
 updateMap <- function(mapref, variable, trips) {
   # Redraw routes, coloured by $variable
   if (nrow(trips) > 0) {
-    leafletProxy(mapref, data=trips) %>%
-      clearGroup('routes') %>%
-      addPolylines(color=factpal(trips$modality), label=trips$modality, popup = trips$modality, group = 'routes')
+    map <- leafletProxy(mapref, data=trips) %>% clearGroup('routes')
+    addTrips(map, trips, variable)
   }
 }
 
