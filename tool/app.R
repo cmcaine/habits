@@ -5,7 +5,7 @@
 library(shiny)
 library(leaflet)
 # Install my fork
-# devtools::install_github("cmcaine/leaflet.extras")
+devtools::install_github("cmcaine/leaflet.extras")
 library(leaflet.extras)
 library(sf)
 library(ggplot2)
@@ -169,7 +169,16 @@ splits = c('modality', 'IMD', 'age', 'gender', 'region')
 inputWidgets = inputPanel(
   selectInput('variable', 'variable', variables),
   selectInput('filter', 'filter', filters),
-  selectInput('split', 'split', splits),
+  # Show split panel unless active tab is the map. Map is the first active tab, hence the more elaborate function
+  conditionalPanel('(() => {
+                   tab = document.querySelector(\'[aria-expanded="true"][data-toggle="tab"]\')
+                   if (tab == null) {
+                     return false
+                   } else {
+                     return tab.getAttribute("data-value") !== map
+                   }
+})()',
+                   selectInput('split', 'split', splits)),
   conditionalPanel('document.querySelector(\'[aria-expanded="true"][data-value="before and after"][data-toggle="tab"]\') !== null',
                    dateInput('intervention_date', 'intervention date', value = "2017-08-01"))
 )
