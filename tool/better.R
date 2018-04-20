@@ -10,6 +10,26 @@ update <- function(input, output, regions) {
 	updateMap("map", input$variable, trips)
 }
 
+# NB: this can be a reactive value to avoid recomputation
+filterTrips <- function(input$filter, regions) {
+	# Return a subset of trips.export
+	if (input$filter == "region") {
+		trips.export[st_intersects(regions, trips.export)[[1]],]
+	} else {
+		print("Unknown filter!")
+	}
+}
+
+plotMeta = data.frame(
+	variable = c('MET-h', '# Journeys', '% Journeys'),
+	title = c(
+		  "Change in MET-h per mode over time",
+		  "Number of Journeys by mode per week",
+		  "Proportion of Journeys by mode per week"
+		  ),
+	row.names = 'variable'
+	)
+
 updatePlot <- function(outPlot, variable, trips, xaxis, xlabel) {
 	# Prepare a ggplot according to variable and xaxis
 	  if (nrow(trips) < 1) {
@@ -37,29 +57,6 @@ updatePlot <- function(outPlot, variable, trips, xaxis, xlabel) {
 
 	# Render it to outPlot
 	outPlot = renderPlot(plot)
-}
-
-plotMeta = data.frame(
-	variable = c('MET-h', '# Journeys', '% Journeys'),
-	title = c(
-		  "Change in MET-h per mode over time",
-		  "Number of Journeys by mode per week",
-		  "Proportion of Journeys by mode per week"
-		  ),
-	plot = c(
-		 function(xaxis) {
-	row.names = 'variable'
-	)
-
-
-# NB: this can be a reactive value to avoid recomputation
-filterTrips <- function(input$filter, regions) {
-	# Return a subset of trips.export
-	if (input$filter == "region") {
-		st_intersection(trips.export, regions)
-	} else {
-		print("Unknown filter!")
-	}
 }
 
 updateMap <- function(mapref, variable, trips) {
