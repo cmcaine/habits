@@ -307,12 +307,12 @@ server <- function(input, output) {
 
   addPolutionRaster <- function(map, rasta, group, ...) {
     minmax <- c(cellStats(rasta, min), cellStats(rasta, max))
-    palette = colorNumeric(palette = defraPalette, domain = minmax)
+    palette = colorNumeric(palette = defraPalette, domain = c(0, 70))
     map %>%
       addRasterImage(rasta,
         group = "Pollution map",
         opacity = .4,
-        col = defraPalette) %>%
+        col = palette) %>%
       addLegend("bottomright",
         pal = palette,
         values = minmax,
