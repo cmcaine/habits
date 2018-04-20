@@ -242,15 +242,15 @@ inputWidgets = inputPanel(
   # Show split panel unless active tab is the map. Map is the first active tab, hence the more elaborate function
   conditionalPanel(
     '(() => {
-    tab = document.querySelector(\'[aria-expanded="true"][data-toggle="tab"]\')
-    if (tab == null) {
-    return false
-    } else {
-    return tab.getAttribute("data-value") !== map
-    }
+      tab = document.querySelector(\'[aria-expanded="true"][data-toggle="tab"]\')
+      if (tab == null) {
+        return false
+      } else {
+        return tab.getAttribute("data-value") !== map
+      }
     })()',
-                   selectInput('split', 'split', splits)
-),
+    selectInput('split', 'split', splits)
+  ),
   conditionalPanel(
     'document.querySelector(\'[aria-expanded="true"][data-value="before and after"][data-toggle="tab"]\') !== null',
     dateInput('intervention_date', 'intervention date', value = "2017-08-01")
@@ -335,11 +335,16 @@ server <- function(input, output) {
     # addPolygons(data = roads, smoothFactor = 20)
   })
 
-  filtered = trips.export
+  ### Reactive/dynamic stuff ###
 
+  # Persistent variables
+
+  filtered = trips.export
   # Use an empty df of the right shape initially.
   regions = subset(combined_lsoas, F)
   drawn_shapes = regions
+
+  # Observers
 
   # Update drawn_shapes
   observeEvent(input$map_draw_all_features, {
@@ -355,6 +360,7 @@ server <- function(input, output) {
     }
   })
 
+  # Attempt to fix double geometry problem with drawn features
   # observeEvent(input$map_draw_new_feature, {
   #   shape = read_sf(toJSON(input$map_draw_new_feature, force=T, auto_unbox = T)) %>%
   #       rename(id = X_leaflet_id) %>% cbind(list(., group="draw", label=.$id))
@@ -388,6 +394,7 @@ server <- function(input, output) {
     update(input, output, regions)
   })
 
+  # Update everything on events
   observe({
     update(input, output, regions)
   })
