@@ -58,6 +58,7 @@ st_crs(combined_lsoas)<-4326
 
 # Colours and theming
 cbbPalette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+defraPalette <- c("#01237D", "#57FF00", "#FB0400")
 theme_update(text = element_text(size = 20))
 
 ### Update logic ###
@@ -252,13 +253,21 @@ server <- function(input, output) {
     addPolygons(map, data = data, weight = 2, layerId = ~id, group = ~group, ...)
   }
 
+  addPolutionRaster <- function(map, rasta, group, ...) {
+    minmax <- c(cellStats(rasta, min), cellStats(rasta, max))
+    palette = colorNumeric(palette = defraPalette, domain = minmax)
+    map %>%
+       addRasterImage(rasta, group = "Pollution map", opacity = .4, col = defraPalette) %>%
+       addLegend("bottomright", pal = palette, values = minmax, group = "Pollution map")
+  }
+
    output$map <- renderLeaflet({
      map = leaflet(options = leafletOptions(preferCanvas = T)) %>%
        addProviderTiles(provider = "CartoDB.Positron") %>%
        setView(-1.61, 54.97, zoom = 13) %>%
        addDrawToolbar(targetGroup = 'draw', circleOptions = drawCircleOptions(), editOptions = editToolbarOptions()) %>%
        addLayersControl(overlayGroups = c("Pollution map", "LSOAs")) %>%
-       addRasterImage(pollution_brick[[1]], group = "Pollution map", opacity = .4) %>%
+       addPolutionRaster(pollution_brick[[1]]) %>%
        addLSOAs(combined_lsoas) %>%
        hideGroup(c("Pollution map", "LSOAs"))
        # addPolygons(data = roads, smoothFactor = 20)
