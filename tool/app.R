@@ -28,9 +28,15 @@ crop.sf <- function(sfdf, rasta) {
 load("../data/pollution_brick.RData")
 
 # Get aggregated lines
-# Each segment will have a list of trips IDs that start, intersecting, or end in the segment
+
+# Each segment will have a list of trips IDs that start, intersect, or end in the segment
 # Table of trips relates trip ID to aggregate statistics
-#  load("../data/roads_sf.Rdata")
+# load("../data/roads_sf.Rdata")
+
+# Didn't do this in the end
+
+# Get trips
+
 load("../data/trips.export.RData")
 # trips.export = crop(trips.export, pollution_brick)
 trips.export = st_as_sf(trips.export)
@@ -243,7 +249,7 @@ server <- function(input, output) {
   addSelectableRegions <- function(map, data, ...) {
     # The labels are fussy
     #   Warning: Error in sum: invalid 'type' (list) of argument
-    addPolygons(map, data = data, weight = 2, layerId = ~id, group = ~group, ...) #, label = htmltools::htmlEscape(data$label), ...)
+    addPolygons(map, data = data, weight = 2, layerId = ~id, group = ~group, ...)
   }
 
    output$map <- renderLeaflet({
@@ -259,8 +265,6 @@ server <- function(input, output) {
    })
 
    filtered = trips.export
-
-   # updatePlot(data.frame(variable = c('# Journeys')), output, filtered)
 
    # Use an empty df of the right shape initially.
    regions = subset(combined_lsoas, F)
@@ -308,8 +312,6 @@ server <- function(input, output) {
    })
 
    observe({update(input, output, regions)})
-
-   # update(data.frame(variable = c('# Journeys'), filter = c('region')), output, regions)
 }
 
 # Run the application
