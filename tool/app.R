@@ -54,6 +54,7 @@ st_crs(trips.export) <- 4326
 load("../data/combined_lsoas.RData")
 combined_lsoas = subset(combined_lsoas, select = c('id', 'LSOA11NM', 'geometry')) %>% rename(label = LSOA11NM)
 combined_lsoas$group = factor("LSOAs")
+combined_lsoas$filter = factor("off")
 st_crs(combined_lsoas) <- 4326
 
 # Colours and theming
@@ -341,7 +342,7 @@ server <- function(input, output) {
 
   filtered = trips.export
   # Use an empty df of the right shape initially.
-  regions = subset(combined_lsoas, F)
+  regions = combined_lsoas
   drawn_shapes = regions
 
   # Observers
@@ -349,14 +350,16 @@ server <- function(input, output) {
   # Update drawn_shapes
   observeEvent(input$map_draw_all_features, {
     if (length(input$map_draw_all_features$features) > 0) {
-      drawn_shapes <<-
+      drawn_shapes <-
         read_sf(toJSON(
           input$map_draw_all_features,
           force = T,
           auto_unbox = T
         )) %>%
         rename(id = X_leaflet_id) %>% cbind(list(., group = "draw", label =
-            .$id))
+            .$id, filter = "off"))
+      # Replace regions (makes a complete copy :/)
+      regions <<- rbind(subset(regions, group != "draw"), drawn_shapes)
     }
   })
 
@@ -373,30 +376,39 @@ server <- function(input, output) {
   observeEvent(input$map_shape_click, {
     print(input$map_shape_click)
 
-    if (nrow(regions) > 0) {
-      # Uncolour currently selected regions
+    activeRegions = subset(regions, filter != "off")
+
+    if (nrow(activeRegions) > 0) {
+      # Uncolour currently selected activeRegions
       leafletProxy("map") %>%
-        addLSOAs(regions)
+        addLSOAs(activeRegions)
     }
 
     # Update regions var.
-    regions <<- switch(
-      input$map_shape_click$group,
-      "LSOAs" = subset(combined_lsoas, id == input$map_shape_click$id),
-      "draw" = subset(drawn_shapes, id == input$map_shape_click$id),
+    id <- input$map_shape_click$id
+    reg <- regions[regions$id == id, ]
+    reg$filter <- switch(as.character(reg$filter),
+      "off" = "intersection",
+      "intersection" = "off"
     )
 
+    # TODO
+    regions[regions$id == id, ] <- reg
+    regions <<- regions
+
     # Highlight selected regions.
+    activeRegions = subset(regions, filter != "off")
     leafletProxy("map") %>%
-      addLSOAs(regions, fillColor = 'red')
+      addLSOAs(activeRegions, fillColor = 'red')
 
     # Update everything else
-    update(input, output, regions)
+    update(input, output, activeRegions)
   })
 
   # Update everything on events
   observe({
-    update(input, output, regions)
+    activeRegions = subset(regions, filter != "off")
+    update(input, output, activeRegions)
   })
 }
 
