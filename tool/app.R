@@ -336,11 +336,7 @@ server <- function(input, output) {
   ### Reactive/dynamic stuff ###
 
   # Persistent variables
-
-  filtered = trips.export
-  # Use an empty df of the right shape initially.
   regions = combined_lsoas
-  drawn_shapes = regions
 
   # Observers
 
