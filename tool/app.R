@@ -320,7 +320,10 @@ server <- function(input, output) {
       setView(-1.61, 54.97, zoom = 13) %>%
       addDrawToolbar(
         targetGroup = 'draw',
-        circleOptions = drawCircleOptions(),
+        polylineOptions = F,
+        circleOptions = F,
+        markerOptions = F,
+        circleMarkerOptions = F,
         editOptions = editToolbarOptions()
       ) %>%
       addLayersControl(overlayGroups = c("Pollution map", "LSOAs")) %>%
