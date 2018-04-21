@@ -48,8 +48,8 @@ trips.export = trips.export[trips.export$modality %in% modes, ]
 
 # Get LSOAs for chloropleth
 combined_lsoas = read_sf("data/combined_lsoas.gpkg")
-combined_lsoas$group = factor("LSOAs")
-combined_lsoas$filter = factor("off")
+combined_lsoas$group = "LSOAs"
+combined_lsoas$filter = "off"
 
 # Colours and theming
 cbbPalette <-
