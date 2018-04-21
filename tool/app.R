@@ -1,6 +1,6 @@
 # Complete shiny app for the HABITS DST.
 #
-# You might need to do setwd("tool") before you run it.
+# Expects the required files to exist in a subdir "data" of the working directory.
 
 library(shiny)
 library(leaflet)
@@ -25,7 +25,7 @@ crop.sf <- function(sfdf, rasta) {
 }
 
 # Get pollution raster for overlay
-load("../data/pollution_brick.RData")
+pollution_brick = raster("data/pollution_brick")
 
 # Get aggregated lines
 
@@ -37,25 +37,19 @@ load("../data/pollution_brick.RData")
 
 # Get trips
 
-load("../data/trips.export.RData")
-# trips.export = crop(trips.export, pollution_brick)
-trips.export = st_as_sf(trips.export)
+trips.export = read_sf("data/trips.gpkg")
 # trips.export = crop.sf(trips.export, pollution_brick)
-trips.export$startDT = as.Date(trips.export$startDT, format = "%a %Y-%m-%d %H:%M:%S")
 # Assign each trip to Thursday of the week its in.
 trips.export$startWeek = as.Date(strptime(strftime(trips.export$startDT, "%Y %W 4"), format = "%Y %W %u"))
 trips.export$MET[is.na(trips.export$MET)] = 0.1
 # Exclude rare modes
 modes = c("Bike", "Bus", "Car", "Foot", "Train")
 trips.export = trips.export[trips.export$modality %in% modes, ]
-st_crs(trips.export) <- 4326
 
 # Get LSOAs for chloropleth
-load("../data/combined_lsoas.RData")
-combined_lsoas = subset(combined_lsoas, select = c('id', 'LSOA11NM', 'geometry')) %>% rename(label = LSOA11NM)
+combined_lsoas = read_sf("data/combined_lsoas.gpkg")
 combined_lsoas$group = factor("LSOAs")
 combined_lsoas$filter = factor("off")
-st_crs(combined_lsoas) <- 4326
 
 # Colours and theming
 cbbPalette <-
