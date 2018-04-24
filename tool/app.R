@@ -11,6 +11,8 @@ library(sf)
 library(ggplot2)
 library(dplyr)
 library(jsonlite)
+library(raster)
+library(purrr)
 
 ### Load and prepare data ###
 
@@ -45,11 +47,22 @@ trips.export$MET[is.na(trips.export$MET)] = 0.1
 # Exclude rare modes
 modes = c("Bike", "Bus", "Car", "Foot", "Train")
 trips.export = trips.export[trips.export$modality %in% modes, ]
+# Extract start and end points
+geom_head = function(geom) {
+  st_point(c(geom[[1]], geom[[length(geom)/2+1]]))
+}
+geom_tail = function(geom) {
+  len = length(geom)
+  st_point(c(geom[[len/2]], geom[[len]]))
+}
+trips.export$origin = st_sfc(lapply(trips.export$geom, geom_head))
+st_crs(trips.export$origin)<-4326
+trips.export$destination = st_sfc(lapply(trips.export$geom, geom_tail))
+st_crs(trips.export$destination)<-4326
 
-# Get LSOAs for chloropleth
-combined_lsoas = read_sf("data/combined_lsoas.gpkg")
-combined_lsoas$group = "LSOAs"
-combined_lsoas$filter = "off"
+# Far too long
+# group_by(st_cast(trips.export, "POINT"), tripId) %>% summarise(tripId, startDT, modality, MET, start = st_sfc(geometry[[1]]), end = st_sfc(geometry[[length(geometry)]]))
+
 
 # Colours and theming
 cbbPalette <-
@@ -65,44 +78,47 @@ theme_update(text = element_text(size = 20))
 
 ### Update logic ###
 
-updateOutputs = function(input, output, regions) {
-  inner = function(variable, filter, split, regions, trips) {
-    # Filter trips by filter and regions
-    # Aggregate variable for each line for the hotroads
-    # Split trips by split and plot
-  }
-
-  inner(input$variable, input$filter, input$split, regions, trips)
-}
-
 update <- function(input, output, regions) {
   # Update map and both plots. Bit expensive, could be a reactive expression
   print("Updating")
   # Filter trips.export to match input$filter
-  trips = filterTrips(input$filter, regions)
+  trips = filterTrips(input$filter, regions, input$dateRange)
   output$plot = updatePlot(input$variable, trips, quote(factor(startWeek)), "Start week")
-  BA_xaxis = substitute(startDT < intervention_date,
+  BA_xaxis = substitute(startDT > intervention_date,
     list(intervention_date = input$intervention_date))
-  output$before_after_plot = updatePlot(input$variable, trips, BA_xaxis, "Before intervention")
+  output$before_after_plot = updatePlot(input$variable, trips, BA_xaxis, "After intervention")
   updateMap("map", input$variable, trips)
 }
 
 # NB: this can be a reactive value to avoid recomputation
-filterTrips <- function(filter, regions) {
+filterTrips <- function(filter, regions, dateRange) {
   # Return a subset of trips.export
+  trips = trips.export
+
+  # Subset by date, but only if we have to because making new sf objects is expensive.
+  if (dateRange[[1]] != min(trips$startDT) ||
+      dateRange[[2]] != max(trips$startDT)) {
+    # Function local copy.
+    trips = trips[(trips$startDT >= dateRange[[1]]) & (trips$startDT <= dateRange[[2]]), ]
+  }
+
   if (filter == "region") {
+    # Find all intersecting regions
     if (nrow(regions) > 0) {
-      inter = st_intersects(regions, trips.export)[[1]]
+      inter = unique(unlist(st_intersects(subset(regions, filter == "intersects"), trips$geom)))
+      start = unique(unlist(st_intersects(subset(regions, filter == "starts in"), trips$origin)))
+      end = unique(unlist(st_intersects(subset(regions, filter == "ends in"), trips$destination)))
+      inter = c(inter, start, end)
       if (length(inter) != 0) {
-        trips.export[inter, ]
+        trips[inter, ]
       } else {
-        subset(trips.export, F)
+        subset(trips, F)
       }
     } else {
-      subset(trips.export, F)
+      subset(trips, F)
     }
-  } else {
-    print("Unknown filter!")
+  } else if (filter == "none") {
+    trips
   }
 }
 
@@ -125,7 +141,7 @@ updatePlot <- function(variable, trips, xaxis, xlabel) {
   if (nrow(trips) == nrow(trips.export)) {
     title = "(All data)"
   } else {
-    title = "(Region)"
+    title = "(Subset)"
   }
 
   plot = switch(
@@ -216,13 +232,11 @@ addTrips <- function (map, trips, variable) {
 
 updateMap <- function(mapref, variable, trips) {
   # Redraw routes, coloured by $variable
+  map <- leafletProxy(mapref) %>% clearGroup('routes')
   if (nrow(trips) > 0) {
-    map <- leafletProxy(mapref, data = trips) %>% clearGroup('routes')
     addTrips(map, trips, variable)
   }
 }
-
-
 
 
 ### Define UI ###
@@ -249,7 +263,9 @@ inputWidgets = inputPanel(
   conditionalPanel(
     'document.querySelector(\'[aria-expanded="true"][data-value="before and after"][data-toggle="tab"]\') !== null',
     dateInput('intervention_date', 'intervention date', value = "2017-08-01")
-  )
+  ),
+  dateRangeInput('dateRange', 'Study period', start = min(trips.export$startDT), end = max(trips.export$startDT)),
+  uiOutput('regionFilter')
 )
 
 plot = plotOutput("plot", height = "100%")
@@ -280,6 +296,10 @@ ui <- fluidPage(# titlePanel("HABITS Decision Support Tool"),
 
 # Draw the map and plot and react to changes in inputs, map draw events, etc.
 server <- function(input, output) {
+
+  # Get LSOAs for chloropleth
+  combined_lsoas = read_sf("regions.gpkg")
+
   addLSOAs <- function(map, data = combined_lsoas, ...) {
     addSelectableRegions(map,
       data = data,
@@ -337,6 +357,7 @@ server <- function(input, output) {
 
   # Persistent variables
   regions = combined_lsoas
+  lastClickedRegion = NA
 
   # Observers
 
@@ -349,9 +370,28 @@ server <- function(input, output) {
           force = T,
           auto_unbox = T
         )) %>%
-        rename(id = X_leaflet_id) %>% cbind(list(., group = "draw", label =
-            .$id, filter = "off"))
-      # Replace regions (makes a complete copy :/)
+        rename(id = X_leaflet_id, geom = geometry) %>%
+        # This event returns some duplicate shapes. Probably a side effect of
+        # the "redraw red" code in map_shape_click handler.
+        subset(is.na(id) == F, select = c("id", "geom"))
+      drawn_shapes$label = NA
+      drawn_shapes$group = "draw"
+
+      # Get old filter values
+      drawn_shapes$filter = NA
+      vs = function(vs) {
+        if (length(vs) == 1) {
+          "off"
+        } else {
+          max(vs, na.rm = T)
+        }
+      }
+      drawn_shapes = group_by(rbind(drawn_shapes, subset(regions, group == "draw")), id) %>%
+        summarise(filter = vs(filter))
+      drawn_shapes$label = NA
+      drawn_shapes$group = "draw"
+
+      # Replace regions
       regions <<- rbind(subset(regions, group != "draw"), drawn_shapes)
     }
   })
@@ -365,43 +405,75 @@ server <- function(input, output) {
   #     addSelectableRegions(shape)
   # })
 
+  updateRegionFilterUI = function(region) {
+    output$regionFilter = renderUI({
+      selectizeInput('regionFilter', region$id, selected = region$filter, c("off", "intersects", "starts in", "ends in"))
+    })
+  }
+
+  observeEvent(input$regionFilter, {
+    regions[regions$id == lastClickedRegion$id, ]$filter <<- input$regionFilter
+    update(input, output, regions)
+  })
+
   # Update regions on click
   observeEvent(input$map_shape_click, {
     print(input$map_shape_click)
 
-    activeRegions = subset(regions, filter != "off")
-
-    if (nrow(activeRegions) > 0) {
-      # Uncolour currently selected activeRegions
-      leafletProxy("map") %>%
-        addLSOAs(activeRegions)
-    }
-
-    # Update regions var.
+    # This event can fire draw_all_features, so check if shape exists
     id <- input$map_shape_click$id
     reg <- regions[regions$id == id, ]
-    reg$filter <- switch(as.character(reg$filter),
-      "off" = "intersection",
-      "intersection" = "off"
-    )
 
-    # TODO
-    regions[regions$id == id, ] <- reg
-    regions <<- regions
+    if (nrow(reg) != 0) {
+      # Test if reg == last
+      # if not, uncolour last, colour reg, and set last = reg.
+      
+      if (is.na(lastClickedRegion)) {
+        # Colour new region
+        leafletProxy("map") %>%
+          addLSOAs(reg, fillColor = "red")
+        lastClickedRegion <<- reg
+      }
 
-    # Highlight selected regions.
-    activeRegions = subset(regions, filter != "off")
-    leafletProxy("map") %>%
-      addLSOAs(activeRegions, fillColor = 'red')
+      if (reg$id != lastClickedRegion$id) {
+        # Uncolour old, colour new
+        leafletProxy("map") %>%
+          addLSOAs(lastClickedRegion) %>%
+          addLSOAs(reg, fillColor = "red")
+        lastClickedRegion <<- reg
+      }
 
-    # Update everything else
-    update(input, output, activeRegions)
+      updateRegionFilterUI(reg)
+      # activeRegions = subset(regions, filter != "off")
+
+      # if (nrow(activeRegions) > 0) {
+      #   # Uncolour currently selected activeRegions
+      #   leafletProxy("map") %>%
+      #     addLSOAs(activeRegions)
+      # }
+
+      # # Update regions var.
+      # reg$filter <- switch(reg$filter,
+      #   "off" = "intersection",
+      #   "intersection" = "off"
+      # )
+
+      # # Update region
+      # regions[regions$id == id, ] <<- reg
+
+      # Highlight selected regions.
+      # activeRegions = subset(regions, filter != "off")
+      # leafletProxy("map") %>%
+      #   addLSOAs(activeRegions, fillColor = 'red')
+
+      # Update everything else
+      # update(input, output, activeRegions)
+    }
   })
 
   # Update everything on events
   observe({
-    activeRegions = subset(regions, filter != "off")
-    update(input, output, activeRegions)
+    update(input, output, regions)
   })
 }
 
