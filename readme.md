@@ -1,4 +1,39 @@
-# Objectives
+# HABITS Decision Support Tool
+
+## Acknowledgements
+
+The development of this software was sponsored by the ESRC (grant ES/P01139X/1) and EU (Horizon 2020, grant 636249). The software is openly available for further use, but to fulfil sponsor requirements, if any further use is made of the software, please contact the Principal Investigator, Prof. Susan Grant-Muller (s.m.grant-muller@its.leeds.ac.uk) with a very brief summary of what is to be used for and the potential impact.
+
+## Objective
+
+Help non-specialists explore and understand how people move and travel around in some study area. The tool takes as input a list of trips (lines in space) and associated metadata and provides a simple UI for subsetting that data by some geographic region (arbitrary polygon) and plotting variables of interest on a map and in graphs.
+
+The tool was built for the HABITS project (ESRC) using data from participants in Newcastle collected as part of the EMPOWER project (EU Horizon 2020). The tool is at an early stage of development and was built to demonstrate the *potential* of this kind of individual level data to transport planners.
+
+If you want to make any use of this software, **please contact the author** (Colin Caine, cmc@cs.man.ac.uk) and ask how to use it, because I haven't bothered to document exactly how to prepare data for the tool yet. I would also be interested in understanding your use case and improving the tool, possibly for free!
+
+## User stories
+
+These are the questions we were interested in answering and that we attempted to answer with this tool:
+
+ 1. What proportion of journeys/journey km were made by each mode over time in some area?
+ 1. How do personal outcomes change by IMD over time?
+ 1. Do people living near this train station cycle to local places and drive to the city centre?
+ 1. Has travel on this route increased relative to other routes in the region?
+ 1. What is the demand model for a locality (especially active modes)?
+
+Here are some other questions we thought were interesting but that we did not seek to answer with this tool:
+
+ 1. What kind of people respond best to intervention X?
+ 1. Have in-app incentives increased use of public transport?
+ 1. What is the decay rate of the effectiveness of an intervention?
+ 1. Can we assess the value for money of an existing or in-progress scheme?
+
+## Development notes
+
+These are notes I took during development. A whole load of this never made it into the tool because either: it's already done by other tools; it wasn't very interesting; I didn't have time; or we studied it some other way.
+
+### Requirements
 
 Measure impact of interventions and understand transport patterns by observing evolution of impact metrics:
 
@@ -21,7 +56,6 @@ Measure impact of interventions and understand transport patterns by observing e
    - Health system
    - Maintenance
  - Congestion
- > - Global warming
 
  - Crossreferenced with:
    - IMD level
@@ -40,7 +74,7 @@ Increase efficacy of future interventions:
 
 Other:
 
- > - Identify routes with bad flow (stop/start conditions)
+ - Identify routes with bad flow (stop/start conditions)
 
 Types of interventions/changes:
 
@@ -52,9 +86,9 @@ Types of interventions/changes:
  - Advertising campaigns
  - Good weather?
 
-# Data available
+### Data available
 
- - "Track and Trace" data: location data + inferred: modality, route aggregates, METh, home and work post codes, route purpose?
+ - "Track and Trace" (T&T) data: location data + inferred: modality, route aggregates, METh, home and work post codes, journey purpose
  - Age and gender of some T&T users
  - NO2 concentrations at some sites
  - Postcode -> IMD map
@@ -63,11 +97,11 @@ Types of interventions/changes:
  - Intervention dates
  - "Road surface cost per vehicle" - susan
 
- - Tom's, DEFRA's and another pollution model
-   - location, time of day -> NO2 exposure
+ - Tom's, DEFRA's and MAPPAIR's pollution models
+   - location, time of day -> NO2 exposure (Tom's only)
    - location -> NO2, PM2.5, PM10, etc exposures
- - G's Health model (METh, demographics -> change in risk of Diabetes, etc)
- - G's accident model (Passenger km/modality -> average accident number)
+ - Gillian's Health model (METh, demographics -> change in risk of Diabetes, etc)
+ - Gillian's accident model (Passenger km/modality -> average accident number)
 
  - Dubious worth:
    - Cycle infrastructure
@@ -77,6 +111,8 @@ Types of interventions/changes:
 Unsourced, but probably useful:
 
  - More track and trace
+   - Second batch from Newcastle GoSmarter
+   - Other apps
  - Roadwork dates and locations
  - Traffic conditions/density/congestion
  - Passenger numbers on public transport
@@ -93,7 +129,7 @@ Problems:
 
 Assess data value:
 
- - How good a predictor is TT?
+ - How good a predictor is T&T?
  - Sources of truth:
    - Bus tickets sold
    - Induction loops
@@ -111,7 +147,7 @@ Assess data value:
      - En route issues
    - More demographic information
 
-# Example questions/User stories
+### Example questions/User stories
 
  1. Proportion of journeys made by car in city centre over time
  1. Proportion of journeys made by car in city centre during rush hour over time
@@ -131,7 +167,7 @@ Assess data value:
 
  1. I want to filter the above questions to routes that pass through/start at/end at a region
 
-# Mappable data
+### Mappable data
 
  - Heatmap/splodgemap of journey destinations
  - Pollution
@@ -140,7 +176,7 @@ Assess data value:
  - Filter by crossreference factors, modality,
    - Multi-heatmap of destinations popularity by modality (three categories works quite well, not sure about more)
 
-# Decision
+### Decision
 
 Heatmap of change in $var since $t
 
@@ -197,7 +233,9 @@ $split = $filt
 
 Other questions by Scatter of $var against $var using time series as data source, filtered as before
 
-# Rationalised questions
+### Rationalised questions
+
+(After feeding the earlier questions to team and Newcastle City Council, we settled on these)
 
  - What proportion of journeys/journey km were made by each mode over time in some area?
  - Have in-app incentives increased use of public transport?

@@ -282,7 +282,20 @@ ui <- fluidPage(# titlePanel("HABITS Decision Support Tool"),
         tabPanel("plot", plot),
         tabPanel("before and after", before_after_plot)
       )
-    )),
+    )
+  ),
+
+  fluidRow(
+    class = "footer",
+
+    column(12,
+    tags$div(
+      style = "width: 100%",
+      tags$p("The project leading to this application has received funding through the ESRC (grant ES/P01139X/1) and the European Union’s Horizon 2020 research and innovation programme under grant agreement no 636249."),
+      tags$img(src="esrc_logo.png"),
+      tags$img(src="eu_logo.jpg")
+    )
+  )),
 
   # Fix the size of various ancestor elements so we can use 100% as a size
   # without messing everything up.
@@ -427,7 +440,7 @@ server <- function(input, output) {
     if (nrow(reg) != 0) {
       # Test if reg == last
       # if not, uncolour last, colour reg, and set last = reg.
-      
+
       if (is.na(lastClickedRegion)) {
         # Colour new region
         leafletProxy("map") %>%
