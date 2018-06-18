@@ -31,15 +31,15 @@ pollution_brick = raster("data/pollution_brick")
 
 # Get aggregated lines
 
+# Didn't do this in the end:
 # Each segment will have a list of trips IDs that start, intersect, or end in the segment
 # Table of trips relates trip ID to aggregate statistics
 # load("../data/roads_sf.Rdata")
 
-# Didn't do this in the end
 
 # Get trips
 
-trips.export = read_sf("data/trips.gpkg")
+trips.export = read_sf("data/sensitive/trips.gpkg")
 # trips.export = crop.sf(trips.export, pollution_brick)
 # Assign each trip to Thursday of the week its in.
 trips.export$startWeek = as.Date(strptime(strftime(trips.export$startDT, "%Y %W 4"), format = "%Y %W %u"))
