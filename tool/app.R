@@ -40,6 +40,7 @@ pollution_brick = raster("data/pollution_brick")
 # Get trips
 
 trips.export = read_sf("data/sensitive/trips.gpkg")
+st_crs(trips.export)<-4326
 # trips.export = crop.sf(trips.export, pollution_brick)
 # Assign each trip to Thursday of the week its in.
 trips.export$startWeek = as.Date(strptime(strftime(trips.export$startDT, "%Y %W 4"), format = "%Y %W %u"))
@@ -383,7 +384,7 @@ server <- function(input, output) {
           force = T,
           auto_unbox = T
         )) %>%
-        rename(id = X_leaflet_id, geom = geometry) %>%
+        rename(id = `_leaflet_id`, geom = geometry) %>%
         # This event returns some duplicate shapes. Probably a side effect of
         # the "redraw red" code in map_shape_click handler.
         subset(is.na(id) == F, select = c("id", "geom"))
