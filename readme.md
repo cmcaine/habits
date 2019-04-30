@@ -12,6 +12,19 @@ The tool was built for the HABITS project (ESRC) using data from participants in
 
 If you want to make any use of this software, please contact the author (Colin Caine, cm\<lastname>@gmail.com) and ask how to use it, because I haven't bothered to document exactly how to prepare data for the tool yet. I would also be interested in understanding your use case and improving the tool, possibly for free!
 
+## Installation
+
+Install all dependencies listed at the top of tool/app.R.
+
+In particular, install my fork of leaflet extras and then restart R:
+
+```
+install.packages("devtools")
+devtools::install_github("cmcaine/leaflet.extras")
+```
+
+Get a trips.gpkg with CRS 4326 and put it in tools/data/sensitive.
+
 ## User stories
 
 These are example questions we were interested in that we attempted to answer with this tool:
